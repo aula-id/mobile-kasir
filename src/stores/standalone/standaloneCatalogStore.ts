@@ -23,11 +23,22 @@ interface StandaloneCatalogState {
   getProducts: () => StandaloneProduct[];
   getCategories: () => StandaloneCategory[];
 
+  // Stock history
+  stockLogs: {
+    id: string;
+    productId: string;
+    change: number;
+    reason: 'sale' | 'void' | 'adjustment' | 'received';
+    referenceId?: string;
+    createdAt: string;
+  }[];
+
   // Product actions
   addProduct: (product: Omit<StandaloneProduct, 'id' | 'createdAt' | 'updatedAt'>) => void;
   updateProduct: (id: string, updates: Partial<StandaloneProduct>) => void;
   deleteProduct: (id: string) => void;
   getProductById: (id: string) => StandaloneProduct | undefined;
+  adjustStock: (productId: string, change: number, reason: 'sale' | 'void' | 'adjustment' | 'received', referenceId?: string) => void;
 
   // Category actions
   addCategory: (category: Omit<StandaloneCategory, 'id'>) => void;
@@ -58,6 +69,7 @@ const emptyModeCatalog: ModeCatalog = {
 const initialState = {
   fnb: { ...emptyModeCatalog },
   retail: { ...emptyModeCatalog },
+  stockLogs: [],
   selectedCategoryId: null as string | null,
   searchQuery: '',
 };
@@ -117,6 +129,28 @@ export const useStandaloneCatalogStore = create<StandaloneCatalogState>()(
         const mode = getCurrentMode();
         return get()[mode].products.find((p) => p.id === id);
       },
+
+      adjustStock: (productId, change, reason, referenceId) => set((state) => {
+        const mode = getCurrentMode();
+        const product = state[mode].products.find(p => p.id === productId);
+
+        if (product && product.trackStock) {
+          product.stockQuantity += change;
+
+          state.stockLogs.unshift({
+            id: generateId(),
+            productId,
+            change,
+            reason,
+            referenceId,
+            createdAt: new Date().toISOString(),
+          });
+
+          if (state.stockLogs.length > 1000) {
+            state.stockLogs = state.stockLogs.slice(0, 1000);
+          }
+        }
+      }),
 
       // Category actions
       addCategory: (category) => set((state) => {
