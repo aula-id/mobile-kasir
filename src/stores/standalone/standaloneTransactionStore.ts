@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import type { StandaloneTransaction } from '@/types/standalone';
+import { useStandaloneCatalogStore } from './standaloneCatalogStore';
 
 interface StandaloneTransactionState {
   transactions: StandaloneTransaction[];
@@ -49,7 +50,14 @@ export const useStandaloneTransactionStore = create<StandaloneTransactionState>(
         };
 
         set((state) => {
-          state.transactions.unshift(newTransaction); // Add to beginning for chronological order (newest first)
+          state.transactions.unshift(newTransaction);
+        });
+
+        const catalog = useStandaloneCatalogStore.getState();
+        newTransaction.items.forEach(item => {
+          if (!item.isOpenItem) {
+            catalog.adjustStock(item.productId, -item.quantity, 'sale', newTransaction.id);
+          }
         });
 
         return newTransaction;
@@ -58,9 +66,16 @@ export const useStandaloneTransactionStore = create<StandaloneTransactionState>(
       voidTransaction: (id) => {
         set((state) => {
           const tx = state.transactions.find((t) => t.id === id);
-          if (tx) {
+          if (tx && tx.status !== 'voided') {
             tx.status = 'voided';
             tx.voidedAt = new Date().toISOString();
+
+            const catalog = useStandaloneCatalogStore.getState();
+            tx.items.forEach(item => {
+              if (!item.isOpenItem) {
+                catalog.adjustStock(item.productId, item.quantity, 'void', tx.id);
+              }
+            });
           }
         });
       },
